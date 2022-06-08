@@ -1,0 +1,136 @@
+//==============================================================================
+// Fracatal Generator | SparkSL
+// Aurther: DN Cherry - dncherry.com - 2022
+// resourses:
+// thebookofshaders.com - Fracatal Brownian Motion
+// https://sparkar.facebook.com/ar-studio/learn/sparksl/sparksl-overview
+// https://github.com/aferriss/sparksl-shader-examples#differences-from-glsl
+//==============================================================================
+
+
+precision highp float;
+using namespace std;;
+
+float random (in vec2 nc){
+  return fract(sin(dot(nc.xy, vec2(12.9898, 78.233)))* 43758.5453123);
+
+}
+
+//looping noise based on random values
+float noise (in vec2 nc){
+    vec2 i = floor(nc);
+    vec2 f = fract(nc);
+
+    float a = random(i);
+    float b = random(i + vec2(1.0, 0.0));
+    float c = random(i + vec2(0.0, 1.0));
+    float d = random(i + vec2(1.0, 1.0));
+
+    vec2 u = f * f * (3.0 - 2.0 * f);
+
+    return mix(a, b, u.x) +
+            (c - a)* u.y * (1.0 - u.x) +
+            (d - b) * u.x * u.y;
+}
+
+//** FBM for basic fractal noise (black and white fractal noise)
+// float fbm (in vec2 nc, float octaves, float amplitude, float lacunarity, float gain, float frequency){
+//   float value = 0.0;
+
+//   for (float i = 0.; i < octaves; i++){
+//     value += amplitude * noise(frequency*nc);   //noise(frequency*x)
+//     nc *= lacunarity;           //lacunarity
+//     amplitude *= gain;   //can be against gain
+//   }
+//     return value;
+//}
+//**
+
+//** FBMWarp for warping fractal noise
+float fbmW (in vec2 nc, float octaves, float amplitude, float lacunarity, float gain, float frequency, vec2 shift){
+  float value = 0.0;
+  //vec2 shift = vec2(100.0);
+
+  mat2 rot = mat2(cos(0.5), sin(0.5),
+                    -sin(0.5), cos(0.50));
+
+  for (float i = 0.; i < octaves; i++){
+    value += amplitude * noise(frequency*nc);   //noise(frequency*x)
+    nc = rot * nc * lacunarity + shift;           //lacunarity
+    amplitude *= gain;   //can be against gain
+  }
+    return value;
+}
+
+//** Shader Parameters
+
+// @param[default= 6.] octaves
+// @param[default=.5] amplitude
+// @param[default= 2.] lacunarity
+// @param[default= .5] gain
+// @param[default= 1.] frequency
+// @param[default= .5] xSpeed
+// @param[default= 1.5] ySpeed
+// @param[default= 100.] shift
+// @param[default= #0000C0FF] colorAccent1
+// @param[default= #AABB00FF] colorAccent2
+// @param[default= #AABB00FF] colorShadow
+// @param[default= #00FFFFFF] colorHighlight
+
+
+vec4 main(float octaves, float amplitude, float lacunarity, float gain,
+float frequency, float xSpeed, vec2 shift, float ySpeed, vec4 colorAccent1, vec4 colorAccent2, vec4 colorShadow, vec4 colorHighlight){
+    //*old varaibles
+    // vec2 uv = fragment(getVertexTexCoord());  // resolution
+    // vec4 FragCoord = fragment(getFragmentCoord());
+     //vec2 nc = fragment(getFragmentCoord().xy)/fragment(getVertexTexCoord().xy);
+    //FragCoord.xy/uv;
+
+    //**basic fractal noise
+    // vec2 nc = fragment(getFragmentCoord().xy)/fragment(getRenderTargetSize());
+    // nc.x *= fragment(getRenderTargetSize().x)/fragment(getRenderTargetSize().y);
+    // vec3 color = vec3(0.0, 0.0, 0.0);
+
+    // color += fbm(nc*3.0, octaves, amplitude, lacunarity, gain, frequency);
+
+    // return vec4(color,1.0);
+    //**
+
+    //**DomainWarping
+      float time = getTime();
+      vec2 nc = fragment(getFragmentCoord().xy)/fragment(getRenderTargetSize())*3.;
+      vec3 color = vec3(0.0);
+
+      vec2 q = vec2(0.);
+      q.x = fbmW( nc + 0.00*time, octaves,amplitude, lacunarity, gain, frequency, shift);
+      q.y = fbmW( nc + vec2(1.0), octaves,amplitude, lacunarity, gain, frequency, shift);
+
+      vec2 r = vec2(0.);
+      r.x = fbmW( nc + 1.0*q + vec2(1.7,9.2)+ (xSpeed*time), octaves,amplitude,
+      lacunarity, gain, frequency, shift);  //control x flow direction and speed
+
+      r.y = fbmW( nc + 1.0*q + vec2(1.7,9.2)+ (ySpeed*time), octaves, amplitude,
+      lacunarity, gain, frequency, shift);  //control y flow direction and speed
+
+      float f = fbmW(nc+r, octaves, amplitude, lacunarity, gain, frequency, shift);
+
+      //vec3 colorA = ac.rgb;
+
+      color = mix(colorAccent1.rgb,
+      colorAccent2.rgb, clamp((f*f)*4.0,0.0,1.0));
+
+
+
+      color = mix(color,
+      colorShadow.rgb,
+                  clamp(length(q),0.0,1.0));
+
+      color = mix(color,
+     colorHighlight.rgb,
+                  clamp(length(r.x),0.0,1.0));
+
+
+      return vec4((f*f*f+.6*f*f+.5*f)*color,1.);
+
+    //**
+}
